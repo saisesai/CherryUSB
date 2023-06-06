@@ -4,7 +4,7 @@
 
 CherryUSB 是一个小而美的、可移植性高的、用于嵌入式系统(带 USB IP)的 USB 主从协议栈。
 
-![CherryUSB](./docs/assets/usb_outline.png)
+![CherryUSB](./docs/assets/CherryUSB.png)
 
 ## 为什么选择
 
@@ -84,7 +84,7 @@ CherryUSB Device 协议栈资源占用说明（GCC 10.2 with -O2）：
 |   file        |  FLASH (Byte)  |  No Cache RAM (Byte)      |  RAM (Byte)   |  Heap (Byte)     |
 |:-------------:|:--------------:|:-------------------------:|:-------------:|:----------------:|
 |usbd_core.c    |  3263          | 384                       | 17            | 0                |
-|usbd_cdc.c     |  490           | 0                         | 0             | 0                |
+|usbd_cdc_acm.c     |  490           | 0                         | 0             | 0                |
 |usbd_msc.c     |  2772          | 128 + 512(default)        | 16            | 0                |
 |usbd_hid.c     |  501           | 0                         | 0             | 0                |
 |usbd_audio.c   |  1208          | 0                         | 4             | 0                |
