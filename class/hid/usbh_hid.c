@@ -6,6 +6,10 @@
 #include "usbh_core.h"
 #include "usbh_hid.h"
 
+#undef USB_DBG_TAG
+#define USB_DBG_TAG "usbh_hid"
+#include "usb_log.h"
+
 #define DEV_FORMAT "/dev/input%d"
 
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_hid_buf[128];
@@ -110,7 +114,7 @@ int usbh_hid_connect(struct usbh_hubport *hport, uint8_t intf)
     struct usbh_hid *hid_class = usbh_hid_class_alloc();
     if (hid_class == NULL) {
         USB_LOG_ERR("Fail to alloc hid_class\r\n");
-        return -ENOMEM;
+        return -USB_ERR_NOMEM;
     }
 
     hid_class->hport = hport;

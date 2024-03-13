@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, sakumisu
+ * Copyright (c) 2024, sakumisu
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -38,14 +38,16 @@ struct usbh_cdc_ecm {
 extern "C" {
 #endif
 
+int usbh_cdc_ecm_get_connect_status(struct usbh_cdc_ecm *cdc_ecm_class);
+
 void usbh_cdc_ecm_run(struct usbh_cdc_ecm *cdc_ecm_class);
 void usbh_cdc_ecm_stop(struct usbh_cdc_ecm *cdc_ecm_class);
 
 err_t usbh_cdc_ecm_linkoutput(struct netif *netif, struct pbuf *p);
-void usbh_cdc_ecm_lwip_thread_init(struct netif *netif);
+void usbh_cdc_ecm_rx_thread(void *argument);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* USBH_CDC_ACM_H */
+#endif /* USBH_CDC_ECM_H */

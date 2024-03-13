@@ -7,6 +7,10 @@
 #include "usbh_rndis.h"
 #include "rndis_protocol.h"
 
+#undef USB_DBG_TAG
+#define USB_DBG_TAG "usbh_rndis"
+#include "usb_log.h"
+
 #define DEV_FORMAT "/dev/rndis"
 
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_rndis_buf[4096];
@@ -185,7 +189,7 @@ static int usbh_rndis_set_msg_transfer(struct usbh_rndis *rndis_class, uint32_t 
     return ret;
 }
 
-static int usbh_rndis_get_connect_status(struct usbh_rndis *rndis_class)
+int usbh_rndis_get_connect_status(struct usbh_rndis *rndis_class)
 {
     int ret;
     uint8_t data[32];
@@ -196,9 +200,9 @@ static int usbh_rndis_get_connect_status(struct usbh_rndis *rndis_class)
         return ret;
     }
     if (NDIS_MEDIA_STATE_CONNECTED == data[0]) {
-        rndis_class->link_status = true;
+        rndis_class->connect_status = true;
     } else {
-        rndis_class->link_status = false;
+        rndis_class->connect_status = false;
     }
     return 0;
 }
@@ -326,9 +330,9 @@ static int usbh_rndis_connect(struct usbh_hubport *hport, uint8_t intf)
                     goto query_errorout;
                 }
                 if (NDIS_MEDIA_STATE_CONNECTED == data[0]) {
-                    rndis_class->link_status = true;
+                    rndis_class->connect_status = true;
                 } else {
-                    rndis_class->link_status = false;
+                    rndis_class->connect_status = false;
                 }
                 break;
             case OID_802_3_MAXIMUM_LIST_SIZE:
@@ -422,7 +426,7 @@ static int usbh_rndis_disconnect(struct usbh_hubport *hport, uint8_t intf)
     return ret;
 }
 
-static void usbh_rndis_rx_thread(void *argument)
+void usbh_rndis_rx_thread(void *argument)
 {
     uint32_t g_rndis_rx_length;
     uint32_t pmg_offset;
@@ -438,12 +442,12 @@ static void usbh_rndis_rx_thread(void *argument)
     // clang-format off
 find_class:
     // clang-format on
-    g_rndis_class.link_status = false;
+    g_rndis_class.connect_status = false;
     if (usbh_find_class_instance("/dev/rndis") == NULL) {
         goto delete;
     }
 
-    while (g_rndis_class.link_status == false) {
+    while (g_rndis_class.connect_status == false) {
         ret = usbh_rndis_get_connect_status(&g_rndis_class);
         if (ret < 0) {
             usb_osal_msleep(100);
@@ -492,12 +496,18 @@ find_class:
                     g_rndis_rx_length = 0;
                     USB_LOG_ERR("No memory to alloc pbuf for rndis rx\r\n");
                 }
+            } else {
+                g_rndis_rx_length = 0;
+                USB_LOG_ERR("Error rndis packet message\r\n");
             }
         }
     }
+
+    // clang-format off
 delete:
     USB_LOG_INFO("Delete rndis rx thread\r\n");
     usb_osal_thread_delete(NULL);
+    // clang-format on
 }
 
 err_t usbh_rndis_linkoutput(struct netif *netif, struct pbuf *p)
@@ -507,7 +517,7 @@ err_t usbh_rndis_linkoutput(struct netif *netif, struct pbuf *p)
     uint8_t *buffer;
     rndis_data_packet_t *hdr;
 
-    if (g_rndis_class.link_status == false) {
+    if (g_rndis_class.connect_status == false) {
         return ERR_BUF;
     }
 
@@ -539,11 +549,6 @@ err_t usbh_rndis_linkoutput(struct netif *netif, struct pbuf *p)
     }
 
     return ERR_OK;
-}
-
-void usbh_rndis_lwip_thread_init(struct netif *netif)
-{
-    usb_osal_thread_create("usbh_rndis_rx", 2560, CONFIG_USBHOST_PSC_PRIO + 1, usbh_rndis_rx_thread, netif);
 }
 
 __WEAK void usbh_rndis_run(struct usbh_rndis *rndis_class)

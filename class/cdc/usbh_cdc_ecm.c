@@ -1,10 +1,14 @@
 /*
- * Copyright (c) 2022, sakumisu
+ * Copyright (c) 2024, sakumisu
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "usbh_core.h"
 #include "usbh_cdc_ecm.h"
+
+#undef USB_DBG_TAG
+#define USB_DBG_TAG "usbh_cdc_ecm"
+#include "usb_log.h"
 
 #define DEV_FORMAT "/dev/cdc_ether"
 
@@ -39,7 +43,7 @@ static int usbh_cdc_ecm_set_eth_packet_filter(struct usbh_cdc_ecm *cdc_ecm_class
     return usbh_control_transfer(cdc_ecm_class->hport, setup, NULL);
 }
 
-int usbh_cdc_ecm_get_notification(struct usbh_cdc_ecm *cdc_ecm_class)
+int usbh_cdc_ecm_get_connect_status(struct usbh_cdc_ecm *cdc_ecm_class)
 {
     int ret;
 
@@ -91,7 +95,7 @@ static int usbh_cdc_ecm_connect(struct usbh_hubport *hport, uint8_t intf)
                 break;
             case CDC_CS_INTERFACE:
                 if ((cur_iface == cdc_ecm_class->ctrl_intf) && p[DESC_bDescriptorSubType] == CDC_FUNC_DESC_ETHERNET_NETWORKING) {
-                    struct cdc_ecm_descriptor *desc = (struct cdc_ecm_descriptor *)p;
+                    struct cdc_eth_descriptor *desc = (struct cdc_eth_descriptor *)p;
                     mac_str_idx = desc->iMACAddress;
                     cdc_ecm_class->max_segment_size = desc->wMaxSegmentSize;
                     goto get_mac;
@@ -222,7 +226,7 @@ static int usbh_cdc_ecm_disconnect(struct usbh_hubport *hport, uint8_t intf)
     return ret;
 }
 
-static void usbh_cdc_ecm_rx_thread(void *argument)
+void usbh_cdc_ecm_rx_thread(void *argument)
 {
     uint32_t g_cdc_ecm_rx_length;
     int ret;
@@ -240,7 +244,7 @@ find_class:
     }
 
     while (g_cdc_ecm_class.connect_status == false) {
-        ret = usbh_cdc_ecm_get_notification(&g_cdc_ecm_class);
+        ret = usbh_cdc_ecm_get_connect_status(&g_cdc_ecm_class);
         if (ret < 0) {
             usb_osal_msleep(100);
             goto find_class;
@@ -257,7 +261,7 @@ find_class:
 
         g_cdc_ecm_rx_length += g_cdc_ecm_class.bulkin_urb.actual_length;
 
-        if (g_cdc_ecm_rx_length % USB_GET_MAXPACKETSIZE(g_cdc_ecm_class.bulkin->wMaxPacketSize)) {
+        if (g_cdc_ecm_class.bulkin_urb.actual_length != USB_GET_MAXPACKETSIZE(g_cdc_ecm_class.bulkin->wMaxPacketSize)) {
             USB_LOG_DBG("rxlen:%d\r\n", g_cdc_ecm_rx_length);
 
             p = pbuf_alloc(PBUF_RAW, g_cdc_ecm_rx_length, PBUF_POOL);
@@ -274,11 +278,14 @@ find_class:
                 USB_LOG_ERR("No memory to alloc pbuf for cdc ecm rx\r\n");
             }
         } else {
+            /* read continue util read short packet */
         }
     }
+    // clang-format off
 delete:
     USB_LOG_INFO("Delete cdc ecm rx thread\r\n");
     usb_osal_thread_delete(NULL);
+    // clang-format on
 }
 
 err_t usbh_cdc_ecm_linkoutput(struct netif *netif, struct pbuf *p)
@@ -305,11 +312,6 @@ err_t usbh_cdc_ecm_linkoutput(struct netif *netif, struct pbuf *p)
     }
 
     return ERR_OK;
-}
-
-void usbh_cdc_ecm_lwip_thread_init(struct netif *netif)
-{
-    usb_osal_thread_create("usbh_cdc_ecm_rx", 2048, CONFIG_USBHOST_PSC_PRIO + 1, usbh_cdc_ecm_rx_thread, netif);
 }
 
 __WEAK void usbh_cdc_ecm_run(struct usbh_cdc_ecm *cdc_ecm_class)

@@ -2,10 +2,6 @@
 #include "NuMicro.h"
 #include "usbd_core.h"
 
-#ifndef USBD_IRQHandler
-#define USBD_IRQHandler USBD_IRQHandler
-#endif
-
 #ifndef USBD_EPNUM
 #define USBD_EPNUM 8
 #endif
@@ -97,7 +93,7 @@ __WEAK void usb_dc_low_level_deinit(void)
 {
 }
 
-int usb_dc_init(void)
+int usb_dc_init(uint8_t busid)
 {
     memset(&g_nuvoton_udc, 0, sizeof(g_nuvoton_udc));
 
@@ -149,7 +145,7 @@ int usb_dc_init(void)
     return 0;
 }
 
-int usb_dc_deinit(void)
+int usb_dc_deinit(uint8_t busid)
 {
     USBD->ATTR = 0x00000040;
     /* Force SE0 */
@@ -158,7 +154,7 @@ int usb_dc_deinit(void)
     return 0;
 }
 
-int usbd_set_address(const uint8_t addr)
+int usbd_set_address(uint8_t busid, const uint8_t addr)
 {
     uint8_t usbd_addr = USBD_GET_ADDR();
     if ((usbd_addr == 0) && (usbd_addr != addr)) {
@@ -169,20 +165,20 @@ int usbd_set_address(const uint8_t addr)
     return 0;
 }
 
-uint8_t usbd_get_port_speed(const uint8_t port)
+uint8_t usbd_get_port_speed(uint8_t busid, const uint8_t port)
 {
     return USB_SPEED_FULL;
 }
 
-int usbd_ep_open(const struct usbd_endpoint_cfg *ep_cfg)
+int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
 {
-    uint8_t ep_idx = USB_EP_GET_IDX(ep_cfg->ep_addr);
+    uint8_t ep_idx = USB_EP_GET_IDX(ep->bEndpointAddress);
 
-    if (USB_EP_DIR_IS_IN(ep_cfg->ep_addr)) {
+    if (USB_EP_DIR_IS_IN(ep->bEndpointAddress)) {
         uint8_t epnum = USBD_EPNUM_FROM_IN_EPIDX(ep_idx);
 
-        g_nuvoton_udc.in_ep[ep_idx].ep_mps = ep_cfg->ep_mps;
-        g_nuvoton_udc.in_ep[ep_idx].ep_type = ep_cfg->ep_type;
+        g_nuvoton_udc.in_ep[ep_idx].ep_mps = USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
+        g_nuvoton_udc.in_ep[ep_idx].ep_type = USB_GET_ENDPOINT_TYPE(ep->bmAttributes);
         g_nuvoton_udc.in_ep[ep_idx].ep_enable = true;
         if (ep_idx == 0) {
             /* EP0 ==> control IN endpoint, address 0 */
@@ -194,8 +190,8 @@ int usbd_ep_open(const struct usbd_endpoint_cfg *ep_cfg)
     } else {
         uint8_t epnum = USBD_EPNUM_FROM_OUT_EPIDX(ep_idx);
 
-        g_nuvoton_udc.out_ep[ep_idx].ep_mps = ep_cfg->ep_mps;
-        g_nuvoton_udc.out_ep[ep_idx].ep_type = ep_cfg->ep_type;
+        g_nuvoton_udc.out_ep[ep_idx].ep_mps = USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
+        g_nuvoton_udc.out_ep[ep_idx].ep_type = USB_GET_ENDPOINT_TYPE(ep->bmAttributes);
         g_nuvoton_udc.out_ep[ep_idx].ep_enable = true;
         if (ep_idx == 0) {
             /* EP1 ==> control OUT endpoint, address 0 */
@@ -209,31 +205,31 @@ int usbd_ep_open(const struct usbd_endpoint_cfg *ep_cfg)
     return 0;
 }
 
-int usbd_ep_close(const uint8_t ep)
+int usbd_ep_close(uint8_t busid, const uint8_t ep)
 {
     USBD->EP[USBD_EPNUM_FROM_EPADDR(ep)].CFG &= ~USBD_CFG_STATE_Msk; // disable endpoint
     return 0;
 }
 
-int usbd_ep_set_stall(const uint8_t ep)
+int usbd_ep_set_stall(uint8_t busid, const uint8_t ep)
 {
     USBD_SET_EP_STALL(USBD_EPNUM_FROM_EPADDR(ep));
     return 0;
 }
 
-int usbd_ep_clear_stall(const uint8_t ep)
+int usbd_ep_clear_stall(uint8_t busid, const uint8_t ep)
 {
     USBD_CLR_EP_STALL(USBD_EPNUM_FROM_EPADDR(ep));
     return 0;
 }
 
-int usbd_ep_is_stalled(const uint8_t ep, uint8_t *stalled)
+int usbd_ep_is_stalled(uint8_t busid, const uint8_t ep, uint8_t *stalled)
 {
     *stalled = USBD_GET_EP_STALL(USBD_EPNUM_FROM_EPADDR(ep)) > 0 ? 1 : 0;
     return 0;
 }
 
-int usbd_ep_start_write(const uint8_t ep, const uint8_t *data, uint32_t data_len)
+int usbd_ep_start_write(uint8_t busid, const uint8_t ep, const uint8_t *data, uint32_t data_len)
 {
     uint8_t ep_idx = USB_EP_GET_IDX(ep);
 
@@ -264,7 +260,7 @@ int usbd_ep_start_write(const uint8_t ep, const uint8_t *data, uint32_t data_len
     return 0;
 }
 
-int usbd_ep_start_read(const uint8_t ep, uint8_t *data, uint32_t data_len)
+int usbd_ep_start_read(uint8_t busid, const uint8_t ep, uint8_t *data, uint32_t data_len)
 {
     uint8_t ep_idx = USB_EP_GET_IDX(ep);
 
@@ -292,7 +288,7 @@ int usbd_ep_start_read(const uint8_t ep, uint8_t *data, uint32_t data_len)
     return 0;
 }
 
-void USBD_IRQHandler(void)
+void USBD_IRQHandler(uint8_t busid)
 {
     uint32_t int_flag = USBD_GET_INT_FLAG();
     uint32_t bus_state = USBD_GET_BUS_STATE();
@@ -304,11 +300,11 @@ void USBD_IRQHandler(void)
         if (USBD_IS_ATTACHED()) {
             /* USB Plug In */
             USBD_ENABLE_USB();
-            usbd_event_connect_handler();
+            usbd_event_connect_handler(0);
         } else {
             /* USB Un-plug */
             USBD_DISABLE_USB();
-            usbd_event_disconnect_handler();
+            usbd_event_disconnect_handler(0);
         }
     }
 
@@ -330,18 +326,18 @@ void USBD_IRQHandler(void)
             USBD_SET_ADDR(0ul);
             g_nuvoton_udc.dev_addr = 0;
 
-            usbd_event_reset_handler();
+            usbd_event_reset_handler(0);
         }
 
         if (bus_state & USBD_STATE_SUSPEND) {
             /* Enable USB but disable PHY */
             USBD_DISABLE_PHY();
-            usbd_event_suspend_handler();
+            usbd_event_suspend_handler(0);
         }
         if (bus_state & USBD_STATE_RESUME) {
             /* Enable USB and enable PHY */
             USBD_ENABLE_USB();
-            usbd_event_resume_handler();
+            usbd_event_resume_handler(0);
         }
     }
 
@@ -363,7 +359,7 @@ void USBD_IRQHandler(void)
             USBD_STOP_TRANSACTION(EP1);
 
             usbd_out_toggle[0] = 0;
-            usbd_event_ep0_setup_complete_handler((uint8_t *)(USBD_BUF_BASE));
+            usbd_event_ep0_setup_complete_handler(0, (uint8_t *)(USBD_BUF_BASE));
         }
 
         if (int_flag & USBD_INTSTS_EP0) {
@@ -416,7 +412,7 @@ void USBD_IRQHandler(void)
 
                         if ((recv_count < g_nuvoton_udc.out_ep[ep_idx].ep_mps) ||
                             (g_nuvoton_udc.out_ep[ep_idx].xfer_len == 0)) {
-                            usbd_event_ep_out_complete_handler(ep_idx, g_nuvoton_udc.out_ep[ep_idx].actual_xfer_len);
+                            usbd_event_ep_out_complete_handler(0, ep_idx, g_nuvoton_udc.out_ep[ep_idx].actual_xfer_len);
                         } else {
                             if (g_nuvoton_udc.out_ep[ep_idx].xfer_len < g_nuvoton_udc.out_ep[ep_idx].ep_mps) {
                                 g_nuvoton_udc.out_ep[ep_idx].mps_xfer_len = g_nuvoton_udc.out_ep[ep_idx].xfer_len;
@@ -445,7 +441,7 @@ void USBD_IRQHandler(void)
                         g_nuvoton_udc.in_ep[ep_idx].actual_xfer_len += g_nuvoton_udc.in_ep[ep_idx].xfer_len;
                         g_nuvoton_udc.in_ep[ep_idx].xfer_len = 0;
 
-                        usbd_event_ep_in_complete_handler(ep_idx | 0x80, g_nuvoton_udc.in_ep[ep_idx].actual_xfer_len);
+                        usbd_event_ep_in_complete_handler(0, ep_idx | 0x80, g_nuvoton_udc.in_ep[ep_idx].actual_xfer_len);
                     }
                 }
             }

@@ -27,7 +27,7 @@ struct usbh_rndis {
     uint32_t request_id;
 
     uint32_t link_speed;
-    bool link_status;
+    bool connect_status;
     uint8_t mac[6];
 
     ip_addr_t ipaddr;
@@ -39,13 +39,14 @@ struct usbh_rndis {
 extern "C" {
 #endif
 
+int usbh_rndis_get_connect_status(struct usbh_rndis *rndis_class);
 int usbh_rndis_keepalive(struct usbh_rndis *rndis_class);
 
 void usbh_rndis_run(struct usbh_rndis *rndis_class);
 void usbh_rndis_stop(struct usbh_rndis *rndis_class);
 
 err_t usbh_rndis_linkoutput(struct netif *netif, struct pbuf *p);
-void usbh_rndis_lwip_thread_init(struct netif *netif);
+void usbh_rndis_rx_thread(void *argument);
 
 #ifdef __cplusplus
 }

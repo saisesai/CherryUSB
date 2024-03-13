@@ -7,6 +7,10 @@
 #include "usbh_msc.h"
 #include "usb_scsi.h"
 
+#undef USB_DBG_TAG
+#define USB_DBG_TAG "usbh_msc"
+#include "usb_log.h"
+
 #define DEV_FORMAT "/dev/sd%c"
 
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_msc_buf[32];
@@ -155,12 +159,12 @@ static int usbh_bulk_cbw_csw_xfer(struct usbh_msc *msc_class, struct CBW *cbw, s
     /* check csw status */
     if (csw->dSignature != MSC_CSW_Signature) {
         USB_LOG_ERR("csw signature error\r\n");
-        return -EINVAL;
+        return -USB_ERR_INVAL;
     }
 
     if (csw->bStatus != 0) {
         USB_LOG_ERR("csw bStatus %d\r\n", csw->bStatus);
-        return -EINVAL;
+        return -USB_ERR_INVAL;
     }
 __err_exit:
     return nbytes < 0 ? (int)nbytes : 0;
@@ -255,7 +259,7 @@ static int usbh_msc_connect(struct usbh_hubport *hport, uint8_t intf)
     struct usbh_msc *msc_class = usbh_msc_class_alloc();
     if (msc_class == NULL) {
         USB_LOG_ERR("Fail to alloc msc_class\r\n");
-        return -ENOMEM;
+        return -USB_ERR_NOMEM;
     }
 
     msc_class->hport = hport;
@@ -283,13 +287,14 @@ static int usbh_msc_connect(struct usbh_hubport *hport, uint8_t intf)
         uint8_t num = 0;
         while (1) {
             config = &g_msc_modeswitch_config[num];
-            if (config) {
+            if (config && config->name) {
                 if ((hport->device_desc.idVendor == config->vid) &&
                     (hport->device_desc.idProduct == config->pid)) {
                     USB_LOG_INFO("%s usb_modeswitch enable\r\n", config->name);
                     usbh_msc_modeswitch(msc_class, config->message_content);
                     return 0;
                 }
+                num++;
             } else {
                 break;
             }
@@ -321,7 +326,7 @@ static int usbh_msc_connect(struct usbh_hubport *hport, uint8_t intf)
         USB_LOG_INFO("Block num:%d,block size:%d\r\n", (unsigned int)msc_class->blocknum, (unsigned int)msc_class->blocksize);
     } else {
         USB_LOG_ERR("Invalid block size\r\n");
-        return -ERANGE;
+        return -USB_ERR_RANGE;
     }
 
     snprintf(hport->config.intf[intf].devname, CONFIG_USBHOST_DEV_NAMELEN, DEV_FORMAT, msc_class->sdchar);
